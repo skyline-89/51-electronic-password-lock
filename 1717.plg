@@ -1,0 +1,36 @@
+<html>
+<body>
+<pre>
+<h1>µVision Build Log</h1>
+<h2>Project:</h2>
+D:\Keil C51\workspace\17\1717.uvproj
+Project File Date:  03/10/2021
+
+<h2>Output:</h2>
+compiling 1717.c...
+1717.C(120): warning C280: 'loop1': unreferenced label
+1717.c - 0 Error(s), 1 Warning(s).
+Build target 'Target 1'
+linking...
+*** WARNING L16: UNCALLED SEGMENT, IGNORED FOR OVERLAY PROCESS
+    SEGMENT: ?PR?_DELAY?1717
+*** WARNING L16: UNCALLED SEGMENT, IGNORED FOR OVERLAY PROCESS
+    SEGMENT: ?PR?DELAY2S500MS?1717
+*** WARNING L16: UNCALLED SEGMENT, IGNORED FOR OVERLAY PROCESS
+    SEGMENT: ?PR?DELAY10S?1717
+Program Size: data=40.3 xdata=0 code=3658
+creating hex file from "1717"...
+"1717" - 0 Error(s), 3 Warning(s).
+Build target 'Target 1'
+compiling 1717.c...
+1717.C(120): warning C280: 'loop1': unreferenced label
+linking...
+*** WARNING L16: UNCALLED SEGMENT, IGNORED FOR OVERLAY PROCESS
+    SEGMENT: ?PR?_DELAY?1717
+*** WARNING L16: UNCALLED SEGMENT, IGNORED FOR OVERLAY PROCESS
+    SEGMENT: ?PR?DELAY2S500MS?1717
+*** WARNING L16: UNCALLED SEGMENT, IGNORED FOR OVERLAY PROCESS
+    SEGMENT: ?PR?DELAY10S?1717
+Program Size: data=40.3 xdata=0 code=3658
+creating hex file from "1717"...
+"1717" - 0 Error(s), 4 Warning(s).

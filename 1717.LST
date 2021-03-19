@@ -1,0 +1,1290 @@
+C51 COMPILER V9.00   1717                                                                  03/19/2021 11:24:44 PAGE 1   
+
+
+C51 COMPILER V9.00, COMPILATION OF MODULE 1717
+OBJECT MODULE PLACED IN 1717.OBJ
+COMPILER INVOKED BY: D:\Keil C51\C51\BIN\C51.EXE 1717.c BROWSE DEBUG OBJECTEXTEND
+
+line level    source
+
+   1          #include <reg52.h>
+   2          #include <intrins.h>
+   3          #define uchar unsigned char  
+   4          #define uint unsigned int 
+   5          #define OP_WRITE 0xa0          // 器件地址以及写入操作 
+   6          #define OP_READ  0xa1           // 器件地址以及读取操作 
+   7          #define delayNOP(); {_nop_();_nop_();_nop_();_nop_();}; 
+   8          //************************定义端口*************************
+   9          sbit SDA = P2^0; //数据线
+  10          sbit SCL = P2^1; //时钟线
+  11          sbit dula=P2^6;
+  12          sbit wela=P2^7;
+  13          sbit alarm =P2^3;
+  14          sbit LCD_HH=P3^1;       
+  15          sbit LCD_EN=P3^4;       
+  16          sbit LCD_RS=P3^5;
+  17          sbit LCD_RW=P3^6;
+  18          sbit LCD_RD = P3^7;
+  19          //************************定义数组及全局变量*************************
+  20          uchar v,w,mark3,free;
+  21          uchar judge;
+  22          uchar code initial_pass[6]={6,1,2,3,4,5};       //初始密码
+  23          //***************存储1602显示的数据*******************************
+  24          uchar code mun_to_char[] = {"0123456789ABCDEF"}; /*定义数字跟ASCII码的关系*/
+  25          uchar code dis1[]={"INPUT PASSWORD"};
+  26          uchar code dis2[]={"OPEN"};
+  27          uchar code dis3[]={"ERROR"};
+  28          uchar code dis4[]={"NEW PASSWORD"};
+  29          uchar code dis5[]={"OPEN  OR  CHANGE"};
+  30          uchar code dis6[]={"SUCCESSFUL"};
+  31          uchar code dis7[]={"THE PASSWORD IS"};
+  32          uchar code dis8[]={"DIFFERENT!"};
+  33          uchar code dis9[]={"INPUT AGAIN"};
+  34          uchar code dis10[]={"About To Lock..."};
+  35          uchar code dis11[]={"TEMPERATURE:"};
+  36          uchar data dis_tem[]={"00.0"};
+  37          //*****************声明操作24C02的函数*****************
+  38          void delayms(uint ms);
+  39          void start(); 
+  40          void stop(); 
+  41          void change_passwords();
+  42          bit match_passwords();
+  43          void write_byte(uchar addr, uchar write_data);
+  44          uchar read_random(uchar random_addr); 
+  45          uchar data_in(); 
+  46          bit data_out(uchar write_data); 
+  47          //*****************************************进程
+  48          uchar passwords[8];//临时存储密码
+  49          bit aleady_confirm;//是否点击确认
+  50          uchar pw_length;//用户已经输入的密码长度
+  51          uchar temp,num;//用于矩阵按键识别
+  52          void manager();//管理员开锁
+  53          void process1();//输入密码
+  54          void process2();//选择
+  55          void over_op();//确认按键后的操作
+C51 COMPILER V9.00   1717                                                                  03/19/2021 11:24:44 PAGE 2   
+
+  56          void over_op2();//密码正确后的操作
+  57          void delay(uchar);//延迟函数
+  58          //**************************按键扫描
+  59          void scanKeyboard0();
+  60          void scanKeyboard1();
+  61          void scanKeyboard2();
+  62          //*******************1602********************************
+  63          bit lcd_busy();
+  64          void write_1602com(uchar com);
+  65          void write_1602dat(uchar dat);
+  66          void lcd_init(void);
+  67          void display_shuru(void);
+  68          void display_error();
+  69          void display_choose();
+  70          void display_successful();
+  71          void display_again();
+  72          void display_different();
+  73          void display_change();
+  74          void display_lock();
+  75          void exter0_init();
+  76          void xuanze1();
+  77          void xuanze2();
+  78          void xianshi();
+  79          void tuige();
+  80          //******************声光********************************** 
+  81          uchar chaoshi_led();
+  82          void open_led(void);
+  83          void shanshuo_led();
+  84          void fault_led();
+  85          void chaoshi_jingbao();
+  86          //*******************延迟函数****************************
+  87          void delay1ms(void);
+  88          void delay5ms(void);
+  89          void delay50ms(void);
+  90          void delay500ms(void);
+  91          void delay1s500ms(void);
+  92          void delay2s500ms(void);
+  93          void delay5s();
+  94          void delay10s(void);
+  95          /*******************18B20***************************************/
+  96          sbit DQ =P2^2;  //定义DS18B20通信端口
+  97          void Init_DS18B20();
+  98          uchar ReadOneChar();
+  99          void WriteOneChar(unsigned char dat);
+ 100          uint ReadTemperature();
+ 101          void display_temperature();
+ 102          void delay2(unsigned int i);
+ 103          //***********************主函数***************************
+ 104          void main() 
+ 105          { 
+ 106   1              uchar  i;
+ 107   1              uchar attempts;
+ 108   1              bit mark;
+ 109   1              free=1;
+ 110   1              judge=read_random(10);
+ 111   1              if(!judge)
+ 112   1              {
+ 113   2              write_byte(10,1);
+ 114   2              for(i=0;i<7;i++)
+ 115   2              {
+ 116   3                      write_byte(i,initial_pass[i]);
+ 117   3              } 
+C51 COMPILER V9.00   1717                                                                  03/19/2021 11:24:44 PAGE 3   
+
+ 118   2      }
+ 119   1              //进程一，输入密码
+ 120   1              loop1:
+ 121   1              display_temperature();
+ 122   1              mark=0;
+ 123   1              loop2:
+ 124   1              display_shuru();
+ 125   1              attempts=0;
+ 126   1              do{
+ 127   2                      //三次开锁失败操作
+ 128   2                      if(attempts==3)
+ 129   2                      {
+ 130   3                              uchar k;          
+ 131   3                              display_lock();
+ 132   3                               shanshuo_led();
+ 133   3                              for(k=0;k<2;k++)
+ 134   3                              {
+ 135   4                                      write_1602com(0x08);
+ 136   4                                      delay500ms();
+ 137   4                                      write_1602com(0x0c);
+ 138   4                                      delay500ms();
+ 139   4                              }                       
+ 140   3                              write_1602com(0x01);
+ 141   3                              delay50ms();
+ 142   3                              manager();
+ 143   3                              free=1;
+ 144   3                              goto loop2;
+ 145   3                              break;
+ 146   3                      }
+ 147   2                      //输入错误的操作
+ 148   2                      else if(attempts!=0)
+ 149   2                      {
+ 150   3                      display_error();
+ 151   3                      delay50ms();
+ 152   3                      fault_led();
+ 153   3                      write_1602com(0x01);
+ 154   3                      display_shuru();
+ 155   3                      }
+ 156   2              process1();
+ 157   2      
+ 158   2                      while(mark3)
+ 159   2                              goto loop2;
+ 160   2                      mark=match_passwords(); 
+ 161   2                      attempts+=1;  
+ 162   2              }
+ 163   1              while(!mark); 
+ 164   1              display_choose();
+ 165   1              process2();
+ 166   1              free=1;
+ 167   1              goto loop2;
+ 168   1              
+ 169   1      } 
+*** WARNING C280 IN LINE 120 OF 1717.C: 'loop1': unreferenced label
+ 170          //*********************************************************
+ 171          void manager()
+ 172          {
+ 173   1              uchar manage;
+ 174   1              uchar read34;
+ 175   1              manage=0;
+ 176   1              LCD_RD=1;
+ 177   1              
+ 178   1              while(!manage)
+C51 COMPILER V9.00   1717                                                                  03/19/2021 11:24:44 PAGE 4   
+
+ 179   1              {
+ 180   2                      read34=LCD_RD;
+ 181   2                      if(!read34)
+ 182   2                      {
+ 183   3                              delay1s500ms();
+ 184   3                              open_led();
+ 185   3                              do{read34=LCD_RD;}while(!read34);
+ 186   3                              manage=1;
+ 187   3                      }
+ 188   2              }
+ 189   1      }
+ 190          //**********************************************************
+ 191          void change_passwords()
+ 192          {
+ 193   1              uchar j;
+ 194   1              uchar mark2;
+ 195   1              mark2=0;
+ 196   1              do{
+ 197   2                      //输入密码
+ 198   2                      process1();
+ 199   2                      write_byte(0,pw_length);
+ 200   2                      for(j=1;j<=pw_length;j++)
+ 201   2                              write_byte(j,passwords[j-1]);
+ 202   2                      //匹配密码
+ 203   2                      display_again();
+ 204   2                      delay500ms();
+ 205   2                      process1();
+ 206   2                      mark2=match_passwords();
+ 207   2                      write_1602com(0x01);
+ 208   2                      if(!mark2)
+ 209   2                      {
+ 210   3                              delay50ms();
+ 211   3                              display_different();  
+ 212   3                              fault_led();
+ 213   3                              delay500ms();
+ 214   3                              write_1602com(0x01);
+ 215   3                              display_change();
+ 216   3                      }
+ 217   2              }while(!mark2);
+ 218   1              display_successful();
+ 219   1              delay1s500ms();
+ 220   1              //修改成功，返回启动界面
+ 221   1      }
+ 222          //**********************************************************
+ 223          bit match_passwords()
+ 224          //密码匹配
+ 225          {
+ 226   1              uchar i;
+ 227   1              uchar pos=read_random(0);
+ 228   1              if(pos==pw_length)
+ 229   1              {
+ 230   2                      uchar read_data;
+ 231   2                      for(i=1;i<=pw_length;i++)
+ 232   2                      {
+ 233   3                              read_data=read_random(i);
+ 234   3                              if(passwords[i-1]!=read_data)
+ 235   3                                      break;
+ 236   3                              if(i==pw_length)
+ 237   3                                      return 1;
+ 238   3                      }
+ 239   2              }
+ 240   1              return 0;
+C51 COMPILER V9.00   1717                                                                  03/19/2021 11:24:44 PAGE 5   
+
+ 241   1      }
+ 242          //**********************************************************
+ 243          void write_byte(uchar addr, uchar write_data) 
+ 244          // 在指定地址addr处写入数据write_data 
+ 245          { 
+ 246   1              SDA = 1; 
+ 247   1              SCL = 1;
+ 248   1              start(); 
+ 249   1              data_out(OP_WRITE); 
+ 250   1              data_out(addr); 
+ 251   1              data_out(write_data); 
+ 252   1              stop(); 
+ 253   1              delayms(10);          // 写入周期 
+ 254   1      } 
+ 255          
+ 256          
+ 257          uchar read_random(uchar random_addr) 
+ 258          // 在指定地址读取存储的字节
+ 259          { 
+ 260   1              uchar readda;
+ 261   1              SDA = 1;
+ 262   1              SCL = 1;
+ 263   1              start();
+ 264   1              data_out(OP_WRITE);
+ 265   1              data_out(random_addr);
+ 266   1              start();
+ 267   1              data_out(OP_READ);
+ 268   1              readda=data_in();
+ 269   1              stop();
+ 270   1              return readda;
+ 271   1      } 
+ 272          
+ 273          uchar data_in() 
+ 274          // 从AT24C02移出数据到MCU 
+ 275          { 
+ 276   1              uchar i,read_data; 
+ 277   1              for(i = 0; i < 8; i++) 
+ 278   1              { 
+ 279   2                      SCL = 1; 
+ 280   2                       read_data <<= 1; 
+ 281   2                      read_data |= SDA; 
+ 282   2                       SCL = 0; 
+ 283   2              } 
+ 284   1              return(read_data); 
+ 285   1      } 
+ 286          
+ 287          bit data_out(uchar write_data)  
+ 288          // 从MCU移出数据到AT24C02 
+ 289          { 
+ 290   1              uchar i; 
+ 291   1              bit ack_bit; 
+ 292   1              for(i = 0; i < 8; i++)   // 循环移入8个位 
+ 293   1              { 
+ 294   2                      SDA = (bit)(write_data & 0x80); 
+ 295   2                      _nop_(); 
+ 296   2                      SCL = 1; 
+ 297   2                      delayNOP(); 
+ 298   2                      SCL = 0; 
+ 299   2                      write_data <<= 1; 
+ 300   2              } 
+ 301   1              SDA = 1;                     // 读取应答 
+ 302   1              delayNOP(); 
+C51 COMPILER V9.00   1717                                                                  03/19/2021 11:24:44 PAGE 6   
+
+ 303   1              SCL = 1; 
+ 304   1              delayNOP(); 
+ 305   1              ack_bit = SDA; 
+ 306   1              SCL = 0; 
+ 307   1              return ack_bit;            // 返回AT24C02应答位 
+ 308   1      } 
+ 309           
+ 310          void start() 
+ 311           //开始位 
+ 312          { 
+ 313   1              SDA = 1; 
+ 314   1              SCL = 1; 
+ 315   1              delayNOP(); 
+ 316   1              SDA = 0; 
+ 317   1              delayNOP(); 
+ 318   1              SCL = 0; 
+ 319   1      } 
+ 320          
+ 321          void stop() 
+ 322           // 停止位 
+ 323          { 
+ 324   1              SDA = 0; 
+ 325   1              delayNOP(); 
+ 326   1              SCL = 1; 
+ 327   1              delayNOP(); 
+ 328   1              SDA = 1; 
+ 329   1      } 
+ 330          
+ 331          
+ 332          //**********************************************************
+ 333          void process1()
+ 334          //输入密码操作
+ 335          {
+ 336   1              pw_length=0;
+ 337   1              aleady_confirm=0;
+ 338   1              exter0_init();
+ 339   1              v=1;
+ 340   1              w=0;
+ 341   1              while(!aleady_confirm)
+ 342   1              {       
+ 343   2                      mark3=chaoshi_led();
+ 344   2                      if(mark3)
+ 345   2                      {
+ 346   3                      chaoshi_jingbao();
+ 347   3                      break;
+ 348   3                      }
+ 349   2                      scanKeyboard1();
+ 350   2              }
+ 351   1              v=0;
+ 352   1              TR0=0;
+ 353   1      }
+ 354          //***************************
+ 355          void process2()
+ 356          //选择开锁还是修改密码
+ 357          {
+ 358   1              aleady_confirm=0;
+ 359   1              while(!aleady_confirm)
+ 360   1              {
+ 361   2                      scanKeyboard2();
+ 362   2              }
+ 363   1              over_op2();
+ 364   1      }
+C51 COMPILER V9.00   1717                                                                  03/19/2021 11:24:44 PAGE 7   
+
+ 365          //****************************
+ 366          void over_op()
+ 367          {
+ 368   1              if(num==10)//执行退格操作
+ 369   1              {
+ 370   2                      if(pw_length==0)
+ 371   2                      ;
+ 372   2                      else
+ 373   2                      {
+ 374   3                              w=0;
+ 375   3                              tuige();
+ 376   3                              pw_length--;
+ 377   3                              passwords[pw_length]=10;
+ 378   3                      }
+ 379   2              }
+ 380   1              else if(num==11||pw_length==8)//执行确认操作
+ 381   1              {
+ 382   2                      aleady_confirm=1;
+ 383   2              }
+ 384   1      
+ 385   1              else //将输入的数字保存
+ 386   1              {
+ 387   2                      TR0=1;
+ 388   2                      w=0;
+ 389   2                      xianshi();
+ 390   2                      passwords[pw_length]=num;
+ 391   2                      pw_length++;                                                                                       
+ 392   2              }
+ 393   1      }
+ 394          //*****************************
+ 395          void over_op2()
+ 396          {
+ 397   1              if(num==12)//选项一开锁
+ 398   1              {
+ 399   2                      xuanze1();
+ 400   2                      delay50ms();
+ 401   2                      open_led();
+ 402   2              }
+ 403   1              if(num==13)//选项二修改密码
+ 404   1              {
+ 405   2                      xuanze2();
+ 406   2                      change_passwords();
+ 407   2              }
+ 408   1      }
+ 409          //*****************************
+ 410          void scanKeyboard1(){
+ 411   1              P3=0xfe;
+ 412   1              temp=P3;
+ 413   1              temp=temp&0xf0;
+ 414   1              if(temp!=0xf0)
+ 415   1               {
+ 416   2                      delay50ms();
+ 417   2                      if(temp!=0xf0)
+ 418   2                       {
+ 419   3                              switch(temp)
+ 420   3                               {                                      
+ 421   4                                      case 0xe0: num=0;
+ 422   4                                              break;
+ 423   4                                      case 0xd0: num=1;
+ 424   4                                              break;
+ 425   4                                      case 0xb0: num=2;
+ 426   4                                              break;
+C51 COMPILER V9.00   1717                                                                  03/19/2021 11:24:44 PAGE 8   
+
+ 427   4                                      case 0x70: num=3;
+ 428   4                                              break;
+ 429   4                              }
+ 430   3                              do
+ 431   3                              {
+ 432   4                              temp=P3;
+ 433   4                              temp=temp&0xf0;
+ 434   4                              }while(temp!=0xf0);
+ 435   3                              over_op();
+ 436   3                       }
+ 437   2               }
+ 438   1      
+ 439   1              P3=0xfd;
+ 440   1              temp=P3;
+ 441   1              temp=temp&0xf0;
+ 442   1              if(temp!=0xf0)
+ 443   1               {
+ 444   2                      delay50ms();
+ 445   2                      if(temp!=0xf0)
+ 446   2                       {
+ 447   3                              switch(temp)
+ 448   3                              {
+ 449   4                                      case 0xe0: num=4;
+ 450   4                                              break;
+ 451   4                                      case 0xd0: num=5;
+ 452   4                                              break;
+ 453   4                                      case 0xb0: num=6;
+ 454   4                                              break;
+ 455   4                                      case 0x70: num=7;
+ 456   4                                              break;
+ 457   4                              }
+ 458   3                          do
+ 459   3                              {
+ 460   4                              temp=P3;
+ 461   4                              temp=temp&0xf0;
+ 462   4                              }while(temp!=0xf0);
+ 463   3                              over_op();
+ 464   3                      }
+ 465   2              }
+ 466   1      
+ 467   1              P3=0xfb;
+ 468   1              temp=P3;
+ 469   1              temp=temp&0xf0;
+ 470   1              if(temp!=0xf0)
+ 471   1               {
+ 472   2                      delay50ms();
+ 473   2                      if(temp!=0xf0)
+ 474   2                       {
+ 475   3                              switch(temp)
+ 476   3                              {
+ 477   4                                      case 0xe0: num=8;
+ 478   4                                              break;
+ 479   4                                      case 0xd0: num=9;
+ 480   4                                              break;
+ 481   4                                      case 0xb0: num=10;
+ 482   4                                              break;
+ 483   4                                      case 0x70: num=11;
+ 484   4                                              break;
+ 485   4                              }
+ 486   3                              do
+ 487   3                              {
+ 488   4                              temp=P3;
+C51 COMPILER V9.00   1717                                                                  03/19/2021 11:24:44 PAGE 9   
+
+ 489   4                              temp=temp&0xf0;
+ 490   4                              }while(temp!=0xf0);
+ 491   3                              over_op();
+ 492   3                      }
+ 493   2              }
+ 494   1      }
+ 495          //*************************
+ 496          void scanKeyboard2()
+ 497          {
+ 498   1              P3=0xf7;
+ 499   1              temp=P3;
+ 500   1              temp=temp&0xf0;
+ 501   1              if(temp!=0xf0)
+ 502   1               {
+ 503   2                      delay50ms();
+ 504   2                      if(temp!=0xf0)
+ 505   2                       {
+ 506   3                              switch(temp)
+ 507   3                              {
+ 508   4                                      case 0xe0: num=12;
+ 509   4                                              break;
+ 510   4                                      case 0xd0: num=13;
+ 511   4                                              break;
+ 512   4                              }
+ 513   3                              P3=0x00;
+ 514   3                              aleady_confirm=1;
+ 515   3                      }
+ 516   2              }
+ 517   1      }
+ 518          //************************************
+ 519          void scanKeyboard0(){
+ 520   1              P3=0xfe;
+ 521   1              temp=P3;
+ 522   1              temp=temp&0xf0;
+ 523   1              if(temp!=0xf0)
+ 524   1               {
+ 525   2                      delay50ms();
+ 526   2                      if(temp!=0xf0)
+ 527   2                       {
+ 528   3                              free=0;
+ 529   3                              }
+ 530   2                              do
+ 531   2                              {
+ 532   3                              temp=P3;
+ 533   3                              temp=temp&0xf0;
+ 534   3                              }while(temp!=0xf0);
+ 535   2              }
+ 536   1      
+ 537   1              P3=0xfd;
+ 538   1              temp=P3;
+ 539   1              temp=temp&0xf0;
+ 540   1              if(temp!=0xf0)
+ 541   1               {
+ 542   2                      delay50ms();
+ 543   2                      if(temp!=0xf0)
+ 544   2                       {
+ 545   3                              free=0;
+ 546   3                              }
+ 547   2                              do
+ 548   2                              {
+ 549   3                              temp=P3;
+ 550   3                              temp=temp&0xf0;
+C51 COMPILER V9.00   1717                                                                  03/19/2021 11:24:44 PAGE 10  
+
+ 551   3                              }while(temp!=0xf0);
+ 552   2                      }
+ 553   1      
+ 554   1              P3=0xfb;
+ 555   1              temp=P3;
+ 556   1              temp=temp&0xf0;
+ 557   1              if(temp!=0xf0)
+ 558   1               {
+ 559   2                      delay50ms();
+ 560   2                      if(temp!=0xf0)
+ 561   2                       {
+ 562   3                              free=0;
+ 563   3                              }
+ 564   2                              do
+ 565   2                              {
+ 566   3                              temp=P3;
+ 567   3                              temp=temp&0xf0;
+ 568   3                              }while(temp!=0xf0);
+ 569   2                      }
+ 570   1      }
+ 571          //------------------1602-------------------------
+ 572          //-------------------测忙---------------
+ 573          bit lcd_busy() 
+ 574          { 
+ 575   1      bit result; 
+ 576   1      LCD_RS = 0; 
+ 577   1      LCD_RW = 1; 
+ 578   1      LCD_EN = 1;
+ 579   1      _nop_(); 
+ 580   1      _nop_();
+ 581   1      _nop_();
+ 582   1      _nop_(); 
+ 583   1      result = (bit)(P0&0x80); 
+ 584   1      LCD_EN = 0; 
+ 585   1      return result; 
+ 586   1      }
+ 587          //--------------写指令--------------
+ 588          void write_1602com(uchar com)
+ 589          {
+ 590   1      while(lcd_busy());
+ 591   1      LCD_RS = 0; 
+ 592   1      LCD_RW = 0; 
+ 593   1      LCD_EN = 0; 
+ 594   1      _nop_(); 
+ 595   1      _nop_(); 
+ 596   1      P0 = com; 
+ 597   1      _nop_(); 
+ 598   1      _nop_();
+ 599   1      _nop_();
+ 600   1      _nop_(); 
+ 601   1      LCD_EN = 1; 
+ 602   1      _nop_(); 
+ 603   1      _nop_(); 
+ 604   1      _nop_();
+ 605   1      _nop_();
+ 606   1      LCD_EN = 0;
+ 607   1      }
+ 608          //--------------写数据-------------
+ 609          void write_1602dat(uchar dat)
+ 610          {
+ 611   1      while(lcd_busy()); 
+ 612   1      LCD_RS = 1; 
+C51 COMPILER V9.00   1717                                                                  03/19/2021 11:24:44 PAGE 11  
+
+ 613   1      LCD_RW = 0;
+ 614   1      LCD_EN = 0;
+ 615   1      P0 = dat; 
+ 616   1      _nop_(); 
+ 617   1      _nop_(); 
+ 618   1      _nop_();
+ 619   1      _nop_();
+ 620   1      LCD_EN = 1;
+ 621   1      _nop_();
+ 622   1      _nop_();
+ 623   1      _nop_();
+ 624   1      _nop_();
+ 625   1      LCD_EN = 0; 
+ 626   1      }
+ 627          //---------------初始化----------------------
+ 628          void lcd_init(void)
+ 629          {
+ 630   1      delay5ms();
+ 631   1      delay5ms();
+ 632   1      delay5ms();
+ 633   1      write_1602com(0x38); //16*2显示，5*7点阵，8位数据 ，设置工作模式
+ 634   1      delay5ms();
+ 635   1      delay5ms(); 
+ 636   1      write_1602com(0x38); 
+ 637   1      delay5ms();
+ 638   1      delay5ms();
+ 639   1      write_1602com(0x38); 
+ 640   1      delay5ms(); 
+ 641   1      write_1602com(0x0c); //显示开，关光标 
+ 642   1      delay5ms(); 
+ 643   1      write_1602com(0x06); //向右移动光标 ，整屏不移动
+ 644   1      delay5ms(); 
+ 645   1      write_1602com(0x01); //清除LCD的显示内容 
+ 646   1      delay5ms(); 
+ 647   1      }
+ 648          //----------------提示输入密码显示--------------
+ 649          void display_shuru(void)
+ 650          {
+ 651   1      uchar i;
+ 652   1      P0=0X00;
+ 653   1      dula=1;
+ 654   1      wela=0;
+ 655   1      delay1ms();
+ 656   1      dula=0;
+ 657   1      wela=0;
+ 658   1      delay1ms();
+ 659   1      delay1ms();
+ 660   1      delay1ms();
+ 661   1      lcd_init();
+ 662   1      write_1602com(0x80);            //显示位置为第一行第一个字符
+ 663   1      i=0;
+ 664   1      while(dis1[i]!='\0')
+ 665   1      {
+ 666   2      write_1602dat(dis1[i]);   //显示“INPUT PASSWORD”
+ 667   2      i++;
+ 668   2      }
+ 669   1      }                                                                                                            
+ 670          //************显示“ERROR”***********
+ 671          void display_error()
+ 672          {
+ 673   1      uchar i;
+ 674   1      P0=0X00;
+C51 COMPILER V9.00   1717                                                                  03/19/2021 11:24:44 PAGE 12  
+
+ 675   1      dula=1;
+ 676   1      wela=0;
+ 677   1      delay1ms();
+ 678   1      dula=0;
+ 679   1      wela=0;
+ 680   1      delay1ms();
+ 681   1      delay1ms();
+ 682   1      delay1ms();
+ 683   1      lcd_init();
+ 684   1      write_1602com(0x80);            //显示位置为第一行第一个字符
+ 685   1      i=0;
+ 686   1      while(dis3[i]!='\0')
+ 687   1      {
+ 688   2      write_1602dat(dis3[i]);   //显示“ERROR”
+ 689   2      i++;
+ 690   2      }                                                                         
+ 691   1      }
+ 692          
+ 693          
+ 694          //****************显示“SUCCESSFUL”***
+ 695          void display_successful()
+ 696          {
+ 697   1      uchar i;
+ 698   1      P0=0X00;
+ 699   1      dula=1;
+ 700   1      wela=0;
+ 701   1      delay1ms();
+ 702   1      dula=0;
+ 703   1      wela=0;
+ 704   1      delay1ms();
+ 705   1      delay1ms();
+ 706   1      delay1ms();
+ 707   1      lcd_init();
+ 708   1      write_1602com(0x82);    //显示位置为第一行第三个字符
+ 709   1      i=0;
+ 710   1      while(dis6[i]!='\0')
+ 711   1      {
+ 712   2      write_1602dat(dis6[i]);  
+ 713   2      i++;
+ 714   2      }                                                                         
+ 715   1      }
+ 716          //***********显示再次输入************
+ 717          void display_again()
+ 718          {
+ 719   1      uchar i;
+ 720   1      P0=0X00;
+ 721   1      dula=1;
+ 722   1      wela=0;
+ 723   1      delay1ms();
+ 724   1      dula=0;
+ 725   1      wela=0;
+ 726   1      delay1ms();
+ 727   1      delay1ms();
+ 728   1      delay1ms();
+ 729   1      lcd_init();
+ 730   1      write_1602com(0x80);            //显示位置为第一行第1个字符
+ 731   1      i=0;
+ 732   1      while(dis9[i]!='\0')
+ 733   1      {
+ 734   2      write_1602dat(dis9[i]);  
+ 735   2      i++;
+ 736   2      }                                                                         
+C51 COMPILER V9.00   1717                                                                  03/19/2021 11:24:44 PAGE 13  
+
+ 737   1      }
+ 738          //**************显示密码不同界面***********
+ 739          void display_different()
+ 740          {
+ 741   1      uchar i,k;
+ 742   1      P0=0X00;
+ 743   1      dula=1;
+ 744   1      wela=0;
+ 745   1      delay1ms();
+ 746   1      dula=0;
+ 747   1      wela=0;
+ 748   1      delay1ms();
+ 749   1      delay1ms();
+ 750   1      delay1ms();
+ 751   1      lcd_init();
+ 752   1      write_1602com(0x80);
+ 753   1      i=0;
+ 754   1      while(dis7[i]!='\0')
+ 755   1      {
+ 756   2      write_1602dat(dis7[i]);  
+ 757   2      i++;
+ 758   2      }
+ 759   1      delay50ms();
+ 760   1      write_1602com(0x0c3);
+ 761   1      k=0;
+ 762   1      while(dis8[k]!='\0')
+ 763   1      {
+ 764   2      write_1602dat(dis8[k]);  
+ 765   2      k++;
+ 766   2      }                                                                         
+ 767   1      }                                                                         
+ 768          
+ 769          
+ 770          //*******************选择界面**********
+ 771          void display_choose()
+ 772          {
+ 773   1      uchar i;
+ 774   1      P0=0X00;
+ 775   1      dula=1;
+ 776   1      wela=0;
+ 777   1      delay1ms();
+ 778   1      dula=0;
+ 779   1      wela=0;
+ 780   1      delay1ms();
+ 781   1      delay1ms();
+ 782   1      delay1ms();
+ 783   1      lcd_init();
+ 784   1      write_1602com(0x80);
+ 785   1      i=0;
+ 786   1      while(dis5[i]!='\0')
+ 787   1      {
+ 788   2      write_1602dat(dis5[i]);
+ 789   2      i++;
+ 790   2      }
+ 791   1      }
+ 792          //**************选择第二行的情况(左键）*******
+ 793          void xuanze1()
+ 794          {
+ 795   1      uchar i=0,k;
+ 796   1      write_1602com(0x0c2);
+ 797   1      write_1602dat('^');
+ 798   1      delay500ms();
+C51 COMPILER V9.00   1717                                                                  03/19/2021 11:24:44 PAGE 14  
+
+ 799   1      for(k=0;k<2;k++)
+ 800   1      {
+ 801   2      write_1602com(0x08);
+ 802   2      delay500ms();
+ 803   2      write_1602com(0x0c);
+ 804   2      delay500ms();
+ 805   2      }
+ 806   1      write_1602com(0x01);
+ 807   1      delay50ms();
+ 808   1      write_1602com(0x86);
+ 809   1      write_1602com(0x06);
+ 810   1      while(dis2[i]!='\0')
+ 811   1      {
+ 812   2      write_1602dat(dis2[i]);
+ 813   2      i++;
+ 814   2      }
+ 815   1      }
+ 816          //********第二行右键**********
+ 817          void xuanze2()
+ 818          {
+ 819   1      uchar i=0,k;
+ 820   1      write_1602com(0x0cd);
+ 821   1      write_1602dat('^');
+ 822   1      delay500ms();
+ 823   1      for(k=0;k<2;k++)
+ 824   1      {
+ 825   2      write_1602com(0x08);
+ 826   2      delay500ms();
+ 827   2      write_1602com(0x0c);
+ 828   2      delay500ms();
+ 829   2      }
+ 830   1      write_1602com(0x01);
+ 831   1      delay50ms();
+ 832   1      display_change();
+ 833   1      }
+ 834          
+ 835          //***********改密界面************
+ 836          void display_change()
+ 837          {
+ 838   1      uchar i;
+ 839   1      i=0;
+ 840   1      write_1602com(0x80);
+ 841   1      write_1602com(0x06);
+ 842   1      while(dis4[i]!='\0')
+ 843   1      {
+ 844   2      write_1602dat(dis4[i]);
+ 845   2      i++;
+ 846   2      }
+ 847   1      }
+ 848          //**********锁定显示***********
+ 849          void display_lock()
+ 850          {
+ 851   1      uchar i;
+ 852   1      P0=0X00;
+ 853   1      dula=1;
+ 854   1      wela=0;
+ 855   1      delay1ms();
+ 856   1      dula=0;
+ 857   1      wela=0;
+ 858   1      delay1ms();
+ 859   1      delay1ms();
+ 860   1      delay1ms();
+C51 COMPILER V9.00   1717                                                                  03/19/2021 11:24:44 PAGE 15  
+
+ 861   1      lcd_init();
+ 862   1      write_1602com(0x80);    //显示位置为第一行第1个字符
+ 863   1      i=0;
+ 864   1      while(dis10[i]!='\0')
+ 865   1      {
+ 866   2      write_1602dat(dis10[i]);         
+ 867   2      i++;
+ 868   2      }                                                                         
+ 869   1      }
+ 870          //---------------------------输密码显示“ * ”
+ 871          
+ 872          void xianshi()
+ 873          {
+ 874   1      P0=0X00;
+ 875   1      dula=1;
+ 876   1      wela=0;
+ 877   1      delay1ms();
+ 878   1      dula=0;
+ 879   1      wela=0;
+ 880   1      delay1ms();
+ 881   1      delay1ms();
+ 882   1      delay1ms();
+ 883   1      write_1602com(0x0c0+pw_length);
+ 884   1      delay5ms();
+ 885   1      write_1602com(0x0c0+pw_length);
+ 886   1      delay5ms();
+ 887   1      write_1602com(0x14);
+ 888   1      write_1602dat('*');
+ 889   1      }
+ 890          //退格
+ 891          void tuige()
+ 892          {
+ 893   1              P0=0X00;
+ 894   1          dula=1;
+ 895   1          wela=0;
+ 896   1          delay1ms();
+ 897   1          dula=0;
+ 898   1          wela=0;
+ 899   1          delay1ms();
+ 900   1          delay1ms();
+ 901   1          delay1ms();         
+ 902   1              write_1602com(0x10);
+ 903   1      write_1602com(0x0c0+pw_length);
+ 904   1              write_1602dat(' ');
+ 905   1      }
+ 906          
+ 907          
+ 908          
+ 909          //******************声音和灯光************
+ 910          //开锁灯，依次亮后闪一长亮
+ 911          void open_led()
+ 912          {
+ 913   1      uchar temp;
+ 914   1      temp=0xfe;
+ 915   1      P1=temp;
+ 916   1      delay50ms();
+ 917   1      temp=0xfc;
+ 918   1      P1=temp;
+ 919   1      delay50ms();
+ 920   1      temp=0xf8;
+ 921   1      P1=temp;
+ 922   1      delay50ms();
+C51 COMPILER V9.00   1717                                                                  03/19/2021 11:24:44 PAGE 16  
+
+ 923   1      temp=0xe0;
+ 924   1      P1=temp;
+ 925   1      alarm=0;
+ 926   1      delay50ms();
+ 927   1      temp=0xc0;
+ 928   1      P1=temp;
+ 929   1      alarm=1;
+ 930   1      delay50ms();
+ 931   1      temp=0x80;
+ 932   1      P1=temp;
+ 933   1      delay50ms();
+ 934   1      temp=0x00;
+ 935   1      P1=temp;
+ 936   1      delay50ms();
+ 937   1      temp=0xff;
+ 938   1      P1=temp;
+ 939   1      delay50ms();
+ 940   1      temp=0x00;
+ 941   1      P1=temp;
+ 942   1      delay50ms();
+ 943   1      temp=0xff;
+ 944   1      P1=temp;
+ 945   1      alarm=0;
+ 946   1      delay50ms();
+ 947   1      temp=0x00;
+ 948   1      P1=temp;
+ 949   1      alarm=1;
+ 950   1      delay5s();
+ 951   1      temp=0xff;
+ 952   1      P1=temp;
+ 953   1      }
+ 954          //错三次警报灯闪烁;
+ 955          void shanshuo_led()
+ 956          {
+ 957   1      uchar temp1,i;
+ 958   1      alarm=0;
+ 959   1      for(i=0;i<40;i++)
+ 960   1      {
+ 961   2      temp1=0x00;
+ 962   2      P1=temp1;
+ 963   2      delay50ms();
+ 964   2      temp1=0xff;
+ 965   2      P1=temp1;
+ 966   2      delay50ms();
+ 967   2      }
+ 968   1      delay50ms();
+ 969   1      alarm=1;
+ 970   1      }
+ 971          //密码错误,后四闪
+ 972          void fault_led()
+ 973          {
+ 974   1      uchar temp3,i;
+ 975   1      alarm=0;
+ 976   1      for(i=0;i<5;i++)
+ 977   1      {
+ 978   2      temp3=0x0f;
+ 979   2      P1=temp3;
+ 980   2      delay50ms();
+ 981   2      temp3=0xff;
+ 982   2      P1=temp3;
+ 983   2      delay50ms();
+ 984   2      }
+C51 COMPILER V9.00   1717                                                                  03/19/2021 11:24:44 PAGE 17  
+
+ 985   1      temp3=0x0f;
+ 986   1      P1=temp3;
+ 987   1      delay500ms();
+ 988   1      delay1s500ms();
+ 989   1      temp3=0xff;
+ 990   1      P1=temp3;
+ 991   1      alarm=1;
+ 992   1      }
+ 993          //**********所有的延时子程序*************
+ 994          void delayms(uint ms)  
+ 995          // 1ms延时子程序 
+ 996          { 
+ 997   1         uchar k; 
+ 998   1         while(ms--) 
+ 999   1         { 
+1000   2            for(k = 0; k < 120; k++); 
+1001   2         } 
+1002   1      }
+1003          void delay(uchar x)
+1004          {
+1005   1              uchar a,b;
+1006   1              for(a=x;a>0;a--)
+1007   1               for(b=200;b>0;b--);
+1008   1      }
+1009          //延时1ms;
+1010          void delay1ms(void)  
+1011          {
+1012   1          unsigned char a,b,c;
+1013   1          for(c=1;c>0;c--)
+1014   1              for(b=142;b>0;b--)
+1015   1                  for(a=2;a>0;a--);
+1016   1      }
+1017          //延时5ms
+1018          void delay5ms(void)  
+1019          {
+1020   1          unsigned char a,b;
+1021   1          for(b=19;b>0;b--)
+1022   1              for(a=130;a>0;a--);
+1023   1      }
+1024          //延时50ms;
+1025          void delay50ms(void)   
+1026          {
+1027   1          unsigned char a,b;
+1028   1          for(b=173;b>0;b--)
+1029   1              for(a=143;a>0;a--);
+1030   1      }
+1031          //延时500ms
+1032          void delay500ms(void)   
+1033          {
+1034   1          unsigned char a,b,c;
+1035   1          for(c=23;c>0;c--)
+1036   1              for(b=152;b>0;b--)
+1037   1                  for(a=70;a>0;a--);
+1038   1      }
+1039          //延时1.5s;
+1040          void delay1s500ms(void)   
+1041          {
+1042   1          unsigned char a,b,c;
+1043   1          for(c=127;c>0;c--)
+1044   1              for(b=96;b>0;b--)
+1045   1                  for(a=60;a>0;a--);
+1046   1      }
+C51 COMPILER V9.00   1717                                                                  03/19/2021 11:24:44 PAGE 18  
+
+1047          //延时2.5s
+1048          void delay2s500ms(void)   
+1049          {
+1050   1          unsigned char a,b,c,n;
+1051   1          for(c=229;c>0;c--)
+1052   1              for(b=214;b>0;b--)
+1053   1                  for(a=24;a>0;a--);
+1054   1          for(n=1;n>0;n--);
+1055   1          _nop_();  
+1056   1      }
+1057          //延时10s;
+1058          void delay10s(void) 
+1059          {
+1060   1          unsigned char a,b,c;
+1061   1          for(c=191;c>0;c--)
+1062   1              for(b=189;b>0;b--)
+1063   1                  for(a=137;a>0;a--);
+1064   1          _nop_();   
+1065   1      }
+1066          //延时5s;
+1067          void delay5s()   
+1068          {
+1069   1          unsigned char a,b,c;
+1070   1          for(c=165;c>0;c--)
+1071   1              for(b=100;b>0;b--)
+1072   1                  for(a=150;a>0;a--);
+1073   1          _nop_(); 
+1074   1          _nop_(); 
+1075   1      }
+1076          //************************按键超时
+1077          uchar chaoshi_led()
+1078          {
+1079   1      if(w==60)
+1080   1      {
+1081   2      w=0;
+1082   2      v=0;
+1083   2      return 1;
+1084   2      }
+1085   1      return 0;
+1086   1      }
+1087          void exter0_init()
+1088          {
+1089   1      TMOD=0x01;
+1090   1      TH0=(65536-50000)/256;
+1091   1      TL0=(65536-50000)%256;
+1092   1      EA=1;
+1093   1      ET0=1;
+1094   1      //TR0=1;
+1095   1      }
+1096          void exter0()interrupt 1
+1097          {
+1098   1      TH0=(65536-50000)/256;
+1099   1      TL0=(65536-50000)%256;
+1100   1      if(v==1)
+1101   1      {
+1102   2      w++;
+1103   2      }
+1104   1      }
+1105          void chaoshi_jingbao()
+1106          {
+1107   1      P1=0;
+1108   1      alarm=0;
+C51 COMPILER V9.00   1717                                                                  03/19/2021 11:24:44 PAGE 19  
+
+1109   1      delay1s500ms();
+1110   1      alarm=1;
+1111   1      P1=1;
+1112   1      }
+1113          /***************************18B20******************************/
+1114          //DS18B20延时函数
+1115          void delay2(unsigned int i)
+1116          {
+1117   1              while(i--);
+1118   1      }
+1119          //DS18B20初始化函数
+1120          void Init_DS18B20(void)
+1121          {
+1122   1              unsigned char x=0;
+1123   1              DQ = 1; //DQ复位
+1124   1              delay2(8); //稍做延时
+1125   1              DQ = 0; //单片机将DQ拉低
+1126   1              delay2(80); //精确延时 大于 480us
+1127   1              DQ = 1; //拉高总线
+1128   1              delay2(14);
+1129   1              x=DQ; //稍做延时后 如果x=0则初始化成功 x=1则初始化失败
+1130   1              delay2(20);
+1131   1      }
+1132          //DS18B20读一个字节
+1133          uchar ReadOneChar(void)
+1134          {
+1135   1              unsigned char i=0;
+1136   1              unsigned char dat = 0;
+1137   1              for (i=8;i>0;i--){
+1138   2                      DQ = 0; // 给脉冲信号
+1139   2                      dat>>=1;
+1140   2                      DQ = 1; // 给脉冲信号
+1141   2                      if(DQ)  dat|=0x80;
+1142   2                      delay2(4);
+1143   2                      }
+1144   1              return(dat);
+1145   1      }
+1146          
+1147          //DS18B20写一个字节
+1148          void WriteOneChar(unsigned char dat)
+1149          {
+1150   1              unsigned char i=0;
+1151   1              for (i=8; i>0; i--){
+1152   2                      DQ = 0;
+1153   2                      DQ = dat&0x01;
+1154   2                      delay2(5);
+1155   2                      DQ = 1;
+1156   2                      dat>>=1;
+1157   2                      }
+1158   1      }
+1159          //DS18B20读取温度
+1160          uint ReadTemperature(void)
+1161          {
+1162   1              unsigned char a=0;
+1163   1              unsigned char b=0;
+1164   1              unsigned int t=0;
+1165   1              float tt=0;
+1166   1              Init_DS18B20();
+1167   1              WriteOneChar(0xCC); // 跳过读序号列号的操作
+1168   1              WriteOneChar(0x44); // 启动温度转换
+1169   1              Init_DS18B20();
+1170   1              WriteOneChar(0xCC); //跳过读序号列号的操作
+C51 COMPILER V9.00   1717                                                                  03/19/2021 11:24:44 PAGE 20  
+
+1171   1              WriteOneChar(0xBE); //读取温度寄存器等（共可读9个寄存器） 前两个就是温度
+1172   1              a=ReadOneChar();
+1173   1              b=ReadOneChar();
+1174   1              t=b;
+1175   1              t<<=8;
+1176   1              t=t|a;
+1177   1              tt=t*0.0625; //将温度的高位与低位合并
+1178   1              t= tt*10+0.5; //对结果进行4舍5入
+1179   1              return(t);
+1180   1      }
+1181          //*******************显示温度
+1182          void display_temperature()
+1183          {
+1184   1              uchar i;
+1185   1              uint ntemp;
+1186   1              EA=0;
+1187   1              P0=0X00;
+1188   1              dula=1;
+1189   1              wela=0;
+1190   1              delay1ms();
+1191   1              dula=0;
+1192   1              wela=0;
+1193   1              delay1ms();
+1194   1              delay1ms();
+1195   1              delay1ms();
+1196   1              lcd_init();
+1197   1              P0 = 0xff;
+1198   1              write_1602com(0x06); //光标向右移1
+1199   1      write_1602com(0x82);
+1200   1              i=0;
+1201   1              while(dis11[i]!='\0')
+1202   1                      {
+1203   2                              write_1602dat(dis11[i]);         
+1204   2                              i++;
+1205   2                      }
+1206   1                      while(free)
+1207   1                              {
+1208   2                                      ntemp=ReadTemperature();
+1209   2                                      write_1602com(0xC2);
+1210   2                                      dis_tem[0] = mun_to_char[ntemp/100];
+1211   2                                      dis_tem[1] = mun_to_char[ntemp%100/10];
+1212   2                                      dis_tem[3] = mun_to_char[ntemp%10];
+1213   2                                      for(i=0;i<4;i++)
+1214   2                                              {
+1215   3                                                      write_1602dat(dis_tem[i]);
+1216   3                                              }
+1217   2                                      write_1602dat(0x0df);
+1218   2                                      write_1602dat(0x43);
+1219   2                                      write_1602com(0xC2);
+1220   2                                      scanKeyboard0();
+1221   2                                      if(ntemp>300)
+1222   2                                              {
+1223   3                                                      fault_led();
+1224   3                                              }
+1225   2                              }
+1226   1      }
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =   2545    ----
+   CONSTANT SIZE    =    159    ----
+   XDATA SIZE       =   ----    ----
+C51 COMPILER V9.00   1717                                                                  03/19/2021 11:24:44 PAGE 21  
+
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =     21      28
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =      1       3
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  1 WARNING(S),  0 ERROR(S)
